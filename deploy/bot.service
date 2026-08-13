@@ -1,0 +1,14 @@
+[Unit]
+Description=Telegram Premium Community Bot
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/telegram-premium-community-bot
+EnvironmentFile=/opt/telegram-premium-community-bot/.env
+ExecStart=/opt/telegram-premium-community-bot/.venv/bin/python /opt/telegram-premium-community-bot/scripts/start.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

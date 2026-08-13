@@ -1,13 +1,13 @@
-"""add Telegram update idempotency and Premium invite approval timestamp
+﻿"""add Telegram update idempotency and Premium invite approval timestamp
 
 Revision ID: 0007_event_idempotency_and_invite_approval
-Revises: 0006_referral_invite_delivery_integrity
+Revises: 0006_referral_invite_integrity
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "0007_event_idempotency_and_invite_approval"
-down_revision = "0006_referral_invite_delivery_integrity"
+down_revision = "0006_referral_invite_integrity"
 branch_labels = None
 depends_on = None
 
@@ -27,3 +27,4 @@ def downgrade() -> None:
     op.drop_column("premium_invites", "approved_at")
     op.drop_index("ix_processed_updates_update_id", table_name="processed_updates")
     op.drop_table("processed_updates")
+

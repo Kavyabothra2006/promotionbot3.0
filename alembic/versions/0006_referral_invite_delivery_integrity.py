@@ -1,12 +1,12 @@
-"""fix referral history, premium invite uniqueness, and durable broadcast recipients
+﻿"""fix referral history, premium invite uniqueness, and durable broadcast recipients
 
-Revision ID: 0006_referral_invite_delivery_integrity
+Revision ID: 0006_referral_invite_integrity
 Revises: 0005_production_constraints
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0006_referral_invite_delivery_integrity"
+revision = "0006_referral_invite_integrity"
 down_revision = "0005_production_constraints"
 branch_labels = None
 depends_on = None
@@ -84,3 +84,4 @@ def downgrade() -> None:
         "pending_referrals",
         ["community_id", "referred_telegram_id"],
     )
+

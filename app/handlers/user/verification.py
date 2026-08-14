@@ -33,7 +33,7 @@ def _progress_bar(completed: int, target: int) -> str:
 async def _verification_text(user: User, completed: int, target: int) -> str:
     name = escape(user.first_name or "there")
     return (
-        f"Hey {name}! Choose how you would like to unlock Premium.\n\n"
+        f"👋 <b>Welcome, {name}!</b>\n\nChoose how you would like to unlock Premium.\n\n"
         f"Referral progress: {_progress_bar(completed, target)} {completed}/{target}"
     )
 

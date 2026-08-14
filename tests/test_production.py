@@ -46,3 +46,22 @@ def test_release_hardening_guards():
     assert "can_invite_users" in onboarding
     assert "premium_unlock_method = UnlockMethod.REFERRAL" in premium
     assert "processed_at" in models and "ix_processed_updates_processed_at" in models
+
+
+def test_application_imports():
+    import app.main  # noqa: F401
+
+
+def test_cleanup_scheduler_is_started():
+    main = (ROOT / "app" / "main.py").read_text()
+    assert "cleanup_scheduler_loop" in main
+    assert "name=\"cleanup-scheduler\"" in main
+
+
+def test_admin_panel_imports_state_filter():
+    panel = (ROOT / "app" / "handlers" / "admin" / "panel.py").read_text()
+    assert "from aiogram.filters import Command, StateFilter" in panel
+
+def test_premium_membership_requires_approved_invite():
+    premium = (ROOT / "app" / "services" / "premium_service.py").read_text()
+    assert "PremiumInvite.approved_at.is_not(None)" in premium

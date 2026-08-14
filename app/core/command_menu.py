@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from aiogram import Bot
-from aiogram.types import BotCommand, BotCommandScopeChat, BotCommandScopeDefault
+from aiogram.types import BotCommand, BotCommandScopeChat, BotCommandScopeDefault, MenuButtonCommands
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,7 +10,7 @@ from app.database.models import CommunityAdmin
 
 USER_COMMANDS = [
     BotCommand(command="start", description="🏠 Start"),
-    BotCommand(command="getaccess", description="🎁 Get Access"),
+    BotCommand(command="referral", description="🎁 Referral"),
     BotCommand(command="help", description="❓ Help"),
 ]
 
@@ -41,8 +41,29 @@ ADMIN_COMMANDS = [
 
 async def configure_command_menus(bot: Bot, session: AsyncSession) -> None:
     await bot.set_my_commands(USER_COMMANDS, scope=BotCommandScopeDefault())
+    await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
     for telegram_id in settings.SUPER_ADMIN_IDS:
-        await bot.set_my_commands(ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=telegram_id))
+        try:
+            await bot.set_my_commands(ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=telegram_id))
+        except Exception:
+            continue
     ids = (await session.execute(select(CommunityAdmin.telegram_id).distinct())).scalars().all()
     for telegram_id in ids:
+        try:
+            await bot.set_my_commands(ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=telegram_id))
+        except Exception:
+            continue
+
+
+async def configure_admin_commands_for_user(bot: Bot, telegram_id: int) -> None:
+    try:
         await bot.set_my_commands(ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=telegram_id))
+    except Exception:
+        return
+
+
+async def configure_user_commands_for_user(bot: Bot, telegram_id: int) -> None:
+    try:
+        await bot.set_my_commands(USER_COMMANDS, scope=BotCommandScopeChat(chat_id=telegram_id))
+    except Exception:
+        return

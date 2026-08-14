@@ -33,7 +33,7 @@ def _progress_bar(completed: int, target: int) -> str:
 async def _verification_text(user: User, completed: int, target: int) -> str:
     name = escape(user.first_name or "there")
     return (
-        f"👋 <b>Welcome, {name}!</b>\n\nChoose how you would like to unlock Premium.\n\n"
+        f"Hey {name}! Choose how you would like to unlock Premium.\n\n"
         f"Referral progress: {_progress_bar(completed, target)} {completed}/{target}"
     )
 
@@ -215,3 +215,20 @@ async def on_purchase_request_sent(call: CallbackQuery, callback_data: PurchaseC
     else:
         await call.answer("Your request is already pending.", show_alert=True)
     return
+
+@router.callback_query(MenuCB.filter(F.action == "help"))
+async def on_help(call: CallbackQuery, callback_data: MenuCB, session: AsyncSession) -> None:
+    resolved = await _resolve_active_user(call, session, callback_data.community_id)
+    if resolved is None:
+        return
+    community, _user = resolved
+    await call.message.edit_text(
+        "❓ <b>How to get access</b>\n\n"
+        "1. Tap <b>🎁 Get Access</b>.\n"
+        "2. Share your personal referral link.\n"
+        f"3. Bring <b>{community.referral_target}</b> successful members into the verification group.\n"
+        "4. You will receive a notification when each referral is counted.\n"
+        "5. When you reach the target, your Premium access is unlocked.",
+        reply_markup=referral_menu_keyboard(community.id),
+    )
+    await call.answer()

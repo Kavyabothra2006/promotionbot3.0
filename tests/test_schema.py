@@ -49,10 +49,11 @@ def test_migration_chain_is_single_and_linear():
         revisions[rev.group(1)] = parent.group(1).strip().strip('"\'')
     assert revisions["0001_initial_schema"] == "None"
     assert revisions["0005_production_constraints"] == "0004_broadcast_resume_cursor"
-    assert revisions["0006_referral_invite_delivery_integrity"] == "0005_production_constraints"
-    assert revisions["0007_event_idempotency_and_invite_approval"] == "0006_referral_invite_delivery_integrity"
-    assert revisions["0008_release_hardening"] == "0007_event_idempotency_and_invite_approval"
-    assert len(revisions) == 8
+    assert revisions["0006_referral_invite_integrity"] == "0005_production_constraints"
+    assert revisions["0007_event_idempotency_invite"] == "0006_referral_invite_integrity"
+    assert revisions["0008_release_hardening"] == "0007_event_idempotency_invite"
+    assert revisions["0009_ui_cleanup_schedule"] == "0008_release_hardening"
+    assert len(revisions) == 9
 
 
 def test_critical_telegram_lifecycle_guards():

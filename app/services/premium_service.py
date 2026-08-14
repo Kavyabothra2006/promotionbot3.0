@@ -96,7 +96,8 @@ async def unlock_premium(
                 PremiumInvite.community_id == community.id,
                 PremiumInvite.user_id == locked.id,
                 PremiumInvite.status == PremiumInviteStatus.ACTIVE,
-                ((PremiumInvite.expires_at > now) | (PremiumInvite.approved_at.is_not(None))),
+                PremiumInvite.approved_at.is_not(None),
+                PremiumInvite.expires_at > now,
             )
             .order_by(PremiumInvite.created_at.desc())
             .limit(1)

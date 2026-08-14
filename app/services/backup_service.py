@@ -6,6 +6,8 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.utils.referral_code import generate_referral_code
+
 from app.database.models import (
     AdminRole,
     BroadcastDelivery,
@@ -70,6 +72,8 @@ async def export_backup(session: AsyncSession, community_id: int) -> dict[str, A
             "referral_target": community.referral_target,
             "remove_on_premium_leave": community.remove_on_premium_leave,
             "delete_join_leave_messages": community.delete_join_leave_messages,
+            "cleanup_frequency": community.cleanup_frequency,
+            "cleanup_last_run_at": _dt(community.cleanup_last_run_at),
             "is_active": community.is_active,
         },
         "admins": [{"telegram_id": a.telegram_id, "role": a.role.value} for a in admins],
@@ -198,6 +202,8 @@ async def import_backup(session: AsyncSession, data: dict[str, Any]) -> Communit
     community.referral_target = c["referral_target"]
     community.remove_on_premium_leave = bool(c["remove_on_premium_leave"])
     community.delete_join_leave_messages = bool(c["delete_join_leave_messages"])
+    community.cleanup_frequency = c.get("cleanup_frequency", "daily")
+    community.cleanup_last_run_at = _parse_dt(c.get("cleanup_last_run_at"))
     community.is_active = bool(c["is_active"])
     await session.flush()
 
@@ -209,13 +215,22 @@ async def import_backup(session: AsyncSession, data: dict[str, Any]) -> Communit
         ))).scalar_one_or_none()
         if existing is None:
             session.add(CommunityAdmin(community_id=community.id, telegram_id=int(a["telegram_id"]), role=AdminRole(a["role"])))
+        else:
+            existing.role = AdminRole(a["role"])
 
     old_to_new: dict[int, int] = {}
     for u in data.get("users", []):
         result = await session.execute(select(User).where(User.community_id == community.id, User.telegram_id == int(u["telegram_id"])))
         user = result.scalar_one_or_none()
         if user is None:
-            user = User(community_id=community.id, telegram_id=int(u["telegram_id"]), referral_code=u["referral_code"])
+            referral_code = str(u.get("referral_code") or "")
+            if not referral_code or (await session.execute(select(User.id).where(User.referral_code == referral_code).limit(1))).scalar_one_or_none() is not None:
+                while True:
+                    referral_code = generate_referral_code()
+                    collision = (await session.execute(select(User.id).where(User.referral_code == referral_code).limit(1))).scalar_one_or_none()
+                    if collision is None:
+                        break
+            user = User(community_id=community.id, telegram_id=int(u["telegram_id"]), referral_code=referral_code)
             session.add(user)
         user.username = u.get("username")
         user.first_name = u.get("first_name") or ""

@@ -255,6 +255,18 @@ async def handle_referral_confirmation(bot: Bot, session: AsyncSession, communit
         f"👥 New referral counted for {escape(referrer.first_name or str(referrer.telegram_id))}: "
         f"{completed}/{community.referral_target}.",
     )
+    # Personalized user notification: the referrer should immediately know that a friend
+    # completed the verification-group join and that the referral counted.
+    try:
+        await bot.send_message(
+            referrer.telegram_id,
+            f"🎉 <b>1 friend joined!</b>\n\n"
+            f"Your referral progress is now <b>{completed}/{community.referral_target}</b> for "
+            f"<b>{escape(community.name)}</b>."
+            + ("\n\n🔓 You reached the required referrals. Your access is being prepared." if completed >= community.referral_target and not referrer.is_premium else ""),
+        )
+    except Exception:
+        logger.debug("Could not send referral-count notification to %s", referrer.telegram_id)
     if not referrer.is_premium and completed >= community.referral_target:
         invite = await unlock_premium(bot, session, community, referrer, UnlockMethod.REFERRAL)
         if invite is not None:

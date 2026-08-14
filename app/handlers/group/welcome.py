@@ -6,9 +6,10 @@ from datetime import datetime, timezone
 
 from aiogram import Bot, Router
 from aiogram.exceptions import TelegramAPIError
-from aiogram.filters.chat_member_updated import JOIN_TRANSITION, ChatMemberUpdatedFilter
+from aiogram.filters.chat_member_updated import JOIN_TRANSITION, LEAVE_TRANSITION, ChatMemberUpdatedFilter
 from aiogram.types import ChatMemberUpdated
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.database.models import Community, MediaType, User
 from app.keyboards.user_kb import welcome_keyboard
@@ -80,3 +81,36 @@ async def on_group_join(event: ChatMemberUpdated, session: AsyncSession, bot: Bo
 
     await premium_service.handle_referral_confirmation(bot, session, community, new_user.id)
     await _send_group_welcome(bot, community, user_row)
+
+@router.chat_member(ChatMemberUpdatedFilter(member_status_changed=LEAVE_TRANSITION))
+async def on_group_leave(event: ChatMemberUpdated, session: AsyncSession, bot: Bot) -> None:
+    left_user = event.old_chat_member.user
+    if left_user.is_bot:
+        return
+    community = await community_service.get_by_verification_chat(session, event.chat.id)
+    if community is None:
+        return
+    user_row = (
+        await session.execute(
+            select(User).where(
+                User.community_id == community.id, User.telegram_id == left_user.id
+            )
+        )
+    ).scalar_one_or_none()
+    if user_row is None:
+        return
+    user_row.has_joined_verification_group = False
+    # Referral credit is intentionally not revoked automatically: once a referral is
+    # counted, removing it based on a transient leave would make the reward exploitable.
+    if user_row.referred_by_user_id:
+        referrer = await session.get(User, user_row.referred_by_user_id)
+        if referrer is not None:
+            try:
+                await bot.send_message(
+                    referrer.telegram_id,
+                    f"ℹ️ <b>{escape(left_user.first_name or 'Your friend')}</b> left the verification group in "
+                    f"<b>{escape(community.name)}</b>.\n\n"
+                    "Your completed referral count has not been removed.",
+                )
+            except TelegramAPIError:
+                logger.debug("Could not send referral leave notification to %s", referrer.telegram_id)

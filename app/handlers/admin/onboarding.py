@@ -13,6 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database.models import AdminRole, Community, CommunityAdmin
 from app.filters.admin_filter import IsSuperAdminFilter
+from app.keyboards.reply_kb import admin_main_reply_keyboard
+from app.core.command_menu import configure_admin_commands_for_user
+from app.keyboards.reply_kb import admin_main_reply_keyboard
+from app.core.command_menu import configure_admin_commands_for_user
 
 router = Router(name="onboarding")
 
@@ -151,5 +155,7 @@ async def set_referral_target(message: Message, state: FSMContext, session: Asyn
     await state.clear()
     await message.answer(
         f"✅ Community '<b>{escape(community.name)}</b>' created (id={community.id}). "
-        f"You're now its owner admin. Use /admin to manage it."
+        f"You're now its owner admin. Use /admin to manage it.",
+        reply_markup=admin_main_reply_keyboard(),
     )
+    await configure_admin_commands_for_user(message.bot, message.from_user.id)

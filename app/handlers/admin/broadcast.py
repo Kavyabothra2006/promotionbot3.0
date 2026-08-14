@@ -64,14 +64,14 @@ def _extract_button(text: str) -> tuple[str, InlineKeyboardMarkup | None]:
 @router.message(Command("broadcast"))
 async def cmd_broadcast(message: Message, command: CommandObject, state: FSMContext, session: AsyncSession) -> None:
     args = (command.args or "").split()
-    if len(args) != 2 or not args[0].isdigit() or args[1] not in ("all", "premium"):
+    if len(args) != 2 or not args[0].isdigit() or args[1] not in ("all", "premium", "premium_only"):
         await message.answer("Usage: /broadcast <community_id> <all|premium>\nThen send the content in your next message.")
         return
     community_id = int(args[0])
     if not await is_admin_of_community(message.from_user.id, community_id, session):
         await message.answer("Not authorized for this community.")
         return
-    await state.update_data(community_id=community_id, scope=args[1])
+    await state.update_data(community_id=community_id, scope=("premium_only" if args[1] in ("premium", "premium_only") else "all"))
     await state.set_state(Broadcast.waiting_content)
     await message.answer("Send text, photo, video, GIF, or sticker. Append one URL button as [Text](https://example.com) if needed.")
 
@@ -231,6 +231,8 @@ async def receive_broadcast_content(message: Message, state: FSMContext, session
     data = await state.get_data()
     community_id = int(data["community_id"])
     scope = str(data["scope"])
+    if scope == "premium":
+        scope = "premium_only"
     if not await is_admin_of_community(message.from_user.id, community_id, session):
         await state.clear()
         await message.answer("Not authorized for this community.")

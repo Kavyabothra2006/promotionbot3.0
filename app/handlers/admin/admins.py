@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.models import AdminRole, CommunityAdmin
 from app.filters.admin_filter import IsAdminFilter, is_owner_of_community
 from app.services import community_service
+from app.core.command_menu import configure_admin_commands_for_user, configure_user_commands_for_user
 
 router = Router(name="admin_admins")
 router.message.filter(IsAdminFilter())
@@ -55,10 +56,14 @@ async def add_admin(message: Message, command: CommandObject, session: AsyncSess
         CommunityAdmin.telegram_id == telegram_id,
     ))).scalar_one_or_none()
     if existing is not None:
+        if existing.role == AdminRole.OWNER and role != AdminRole.OWNER:
+            await message.answer("The current owner cannot be demoted.")
+            return
         existing.role = role
     else:
         session.add(CommunityAdmin(community_id=community_id, telegram_id=telegram_id, role=role))
     await message.answer(f"✅ Admin {telegram_id} set to {role.value} for community {community_id}.")
+    await configure_admin_commands_for_user(message.bot, telegram_id)
 
 
 @router.message(Command("removeadmin"))
@@ -88,6 +93,7 @@ async def remove_admin(message: Message, command: CommandObject, session: AsyncS
             return
     await session.delete(existing)
     await message.answer(f"✅ Removed admin {telegram_id} from community {community_id}.")
+    await configure_user_commands_for_user(message.bot, telegram_id)
 
 
 @router.message(Command("listadmins"))

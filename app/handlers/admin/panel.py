@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from aiogram import Bot, F, Router
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 from sqlalchemy import select
@@ -275,6 +275,8 @@ async def on_user_action_value(
     community = await community_service.get_by_id(session, community_id)
     if action == "ban":
         user.is_banned = True
+        user.is_premium = False
+        user.joined_premium_at = None
         await session.commit()
         if community:
             await premium_service.revoke_active_invites_for_user(bot, session, community, user)
@@ -286,6 +288,13 @@ async def on_user_action_value(
                         logger.exception("Could not ban user=%s chat=%s", user.telegram_id, chat_id)
         await message.answer("🚫 User banned.", reply_markup=admin_main_reply_keyboard())
     elif action == "unban":
+        if community:
+            for chat_id in (community.verification_chat_id, community.premium_chat_id):
+                if chat_id:
+                    try:
+                        await bot.unban_chat_member(chat_id, user.telegram_id)
+                    except Exception:
+                        logger.exception("Could not unban user=%s chat=%s", user.telegram_id, chat_id)
         user.is_banned = False
         await session.commit()
         await message.answer("✅ User unbanned.", reply_markup=admin_main_reply_keyboard())
@@ -678,6 +687,8 @@ async def cmd_ban(message: Message, session: AsyncSession, bot: Bot) -> None:
         await message.answer("User not found in this community.")
         return
     user.is_banned = True
+    user.is_premium = False
+    user.joined_premium_at = None
     community = await community_service.get_by_id(session, community_id)
     await session.commit()
     if community is not None:
@@ -709,8 +720,17 @@ async def cmd_unban(message: Message, session: AsyncSession) -> None:
     if user is None:
         await message.answer("User not found in this community.")
         return
+    community = await community_service.get_by_id(session, community_id)
+    if community is not None:
+        for chat_id in (community.verification_chat_id, community.premium_chat_id):
+            if chat_id is None:
+                continue
+            try:
+                await message.bot.unban_chat_member(chat_id, telegram_id)
+            except Exception:
+                logger.exception("Could not unban user=%s from chat=%s", telegram_id, chat_id)
     user.is_banned = False
-    await session.flush()
+    await session.commit()
     await message.answer(f"✅ Unbanned {escape(user.first_name or str(telegram_id))} (id={telegram_id}).")
 
 

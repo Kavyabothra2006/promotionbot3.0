@@ -63,7 +63,8 @@ async def add_admin(message: Message, command: CommandObject, session: AsyncSess
     else:
         session.add(CommunityAdmin(community_id=community_id, telegram_id=telegram_id, role=role))
     await message.answer(f"✅ Admin {telegram_id} set to {role.value} for community {community_id}.")
-    await configure_admin_commands_for_user(message.bot, telegram_id)
+    await session.commit()
+    await configure_admin_commands_for_user(message.bot, telegram_id, session)
 
 
 @router.message(Command("removeadmin"))
@@ -92,8 +93,9 @@ async def remove_admin(message: Message, command: CommandObject, session: AsyncS
             await message.answer("The community must retain at least one owner.")
             return
     await session.delete(existing)
+    await session.commit()
+    await configure_user_commands_for_user(message.bot, telegram_id, session)
     await message.answer(f"✅ Removed admin {telegram_id} from community {community_id}.")
-    await configure_user_commands_for_user(message.bot, telegram_id)
 
 
 @router.message(Command("listadmins"))

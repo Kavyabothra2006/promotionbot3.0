@@ -133,6 +133,8 @@ class Community(Base):
     referral_target: Mapped[int] = mapped_column(Integer, default=2)
     remove_on_premium_leave: Mapped[bool] = mapped_column(Boolean, default=False)
     delete_join_leave_messages: Mapped[bool] = mapped_column(Boolean, default=True)
+    cleanup_frequency: Mapped[str] = mapped_column(String(16), default="daily")
+    cleanup_last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
@@ -143,6 +145,17 @@ class Community(Base):
 
     admins: Mapped[list["CommunityAdmin"]] = relationship(back_populates="community", cascade="all, delete-orphan")
     users: Mapped[list["User"]] = relationship(back_populates="community", cascade="all, delete-orphan")
+
+
+class CleanupMessage(Base):
+    __tablename__ = "cleanup_messages"
+    __table_args__ = (Index("ix_cleanup_messages_due", "community_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    community_id: Mapped[int] = mapped_column(ForeignKey("communities.id", ondelete="CASCADE"), index=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger)
+    message_id: Mapped[int] = mapped_column(BigInteger)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class CommunityAdmin(Base):

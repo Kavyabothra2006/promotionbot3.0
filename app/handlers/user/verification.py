@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import Community, PurchaseRequest, PurchaseRequestStatus, User
 from app.keyboards.callback_data import MenuCB, ReferralCB, PurchaseCB
+from app.keyboards.reply_kb import user_main_reply_keyboard
 from app.keyboards.user_kb import (
     instant_access_keyboard,
     referral_link_keyboard,
@@ -42,8 +43,10 @@ async def show_verification_menu(message: Message, session: AsyncSession, commun
     completed = await referral_service.get_referral_progress(session, user.id)
     text = await _verification_text(user, completed, community.referral_target)
     await message.answer(
-        text, reply_markup=verification_menu_keyboard(completed, community.referral_target, community.id)
+        text,
+        reply_markup=verification_menu_keyboard(completed, community.referral_target, community.id),
     )
+    await message.answer("🎁 Referral & Help are available from the menu.", reply_markup=user_main_reply_keyboard())
 
 
 async def _resolve_active_user(

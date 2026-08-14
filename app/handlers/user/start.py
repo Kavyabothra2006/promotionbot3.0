@@ -3,12 +3,13 @@ from __future__ import annotations
 import logging
 from html import escape
 
-from aiogram import Bot, Router
+from aiogram import Bot, F, Router
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.handlers.user.verification import show_verification_menu
+from app.keyboards.reply_kb import user_main_reply_keyboard
 from app.services import admin_service, community_service, premium_service, referral_service
 
 logger = logging.getLogger(__name__)
@@ -30,22 +31,23 @@ async def on_start_deep_link(message: Message, command: CommandObject, session: 
         try:
             community_id = int(payload.removeprefix("verify_"))
         except ValueError:
-            await message.answer(GENERIC_START_TEXT)
+            await message.answer(GENERIC_START_TEXT, reply_markup=user_main_reply_keyboard())
             return
         community = await community_service.get_by_id(session, community_id)
         if community is None or not community.is_active:
-            await message.answer("This community is no longer available.")
+            await message.answer("This community is no longer available.", reply_markup=user_main_reply_keyboard())
             return
         user_row = await referral_service.get_or_create_user(session, community.id, user.id, user.username, user.first_name)
         if user_row.is_banned:
-            await message.answer("You've been banned from this community.")
+            await message.answer("You've been banned from this community.", reply_markup=user_main_reply_keyboard())
             return
         await show_verification_menu(message, session, community, user_row)
+        await message.answer("Use the buttons below to navigate.", reply_markup=user_main_reply_keyboard())
         return
 
     community = await referral_service.resolve_community_by_referral_code(session, payload)
     if community is None:
-        await message.answer(GENERIC_START_TEXT)
+        await message.answer(GENERIC_START_TEXT, reply_markup=user_main_reply_keyboard())
         return
 
     accepted, reason, _pending = await referral_service.register_referral_click(
@@ -58,16 +60,16 @@ async def on_start_deep_link(message: Message, command: CommandObject, session: 
     )
 
     if reason == "self":
-        await message.answer("You can't use your own referral link 🙂")
+        await message.answer("You can't use your own referral link 🙂", reply_markup=user_main_reply_keyboard())
         return
     if reason == "bot":
-        await message.answer(GENERIC_START_TEXT)
+        await message.answer(GENERIC_START_TEXT, reply_markup=user_main_reply_keyboard())
         return
     if reason == "invalid_code":
-        await message.answer("That referral link looks invalid or expired.")
+        await message.answer("That referral link looks invalid or expired.", reply_markup=user_main_reply_keyboard())
         return
     if reason == "duplicate":
-        await message.answer("Looks like you've already been referred by someone else here.")
+        await message.answer("Looks like you've already been referred by someone else here.", reply_markup=user_main_reply_keyboard())
         return
     if accepted:
         await admin_service.notify_admins(
@@ -81,11 +83,10 @@ async def on_start_deep_link(message: Message, command: CommandObject, session: 
         )
         await message.answer(
             "🎉 You've been invited! Once you join the community group, your friend gets credit "
-            "towards unlocking Premium." + join_hint
+            "towards unlocking Premium." + join_hint,
+            reply_markup=user_main_reply_keyboard(),
         )
 
-    # Fix the missed-join edge case: if this user had already joined before clicking the
-    # referral link, run the normal transactional join-confirmation path immediately.
     user_row = await referral_service.get_or_create_user(session, community.id, user.id, user.username, user.first_name)
     if user_row.is_banned:
         return
@@ -99,7 +100,7 @@ async def on_start_deep_link(message: Message, command: CommandObject, session: 
 async def on_start_plain(message: Message, session: AsyncSession) -> None:
     communities = await community_service.find_user_communities(session, message.from_user.id)
     if not communities:
-        await message.answer(GENERIC_START_TEXT)
+        await message.answer(GENERIC_START_TEXT, reply_markup=user_main_reply_keyboard())
         return
 
     active_non_banned = []
@@ -111,12 +112,16 @@ async def on_start_plain(message: Message, session: AsyncSession) -> None:
             active_non_banned.append((community, user_row))
 
     if not active_non_banned:
-        await message.answer("You've been banned from all communities currently linked to this account.")
+        await message.answer(
+            "You've been banned from all communities currently linked to this account.",
+            reply_markup=user_main_reply_keyboard(),
+        )
         return
     if len(active_non_banned) > 1:
         names = "\n".join(f"• {c.name} (community {c.id})" for c, _ in active_non_banned)
         await message.answer(
-            "You belong to multiple communities. Open the verification link for the community you want to manage.\n\n" + names
+            "You belong to multiple communities. Open the verification link for the community you want to manage.\n\n" + names,
+            reply_markup=user_main_reply_keyboard(),
         )
         return
 
@@ -125,27 +130,50 @@ async def on_start_plain(message: Message, session: AsyncSession) -> None:
 
 
 @router.message(Command("getaccess"))
+@router.message(Command("referral"))
 async def on_get_access(message: Message, session: AsyncSession) -> None:
     communities = await community_service.find_user_communities(session, message.from_user.id)
     active = []
     for community in communities:
-        user_row = await referral_service.get_or_create_user(session, community.id, message.from_user.id, message.from_user.username, message.from_user.first_name)
+        user_row = await referral_service.get_or_create_user(
+            session, community.id, message.from_user.id, message.from_user.username, message.from_user.first_name
+        )
         if not user_row.is_banned:
             active.append((community, user_row))
     if not active:
-        await message.answer("Join the verification community first, then use 🎁 Get Access again.")
+        await message.answer(
+            "Join the verification community first, then use 🎁 Referral again.",
+            reply_markup=user_main_reply_keyboard(),
+        )
         return
     if len(active) == 1:
         await show_verification_menu(message, session, active[0][0], active[0][1])
+        await message.answer("Use the buttons below to navigate.", reply_markup=user_main_reply_keyboard())
         return
     names = "\n".join(f"• {c.name}" for c, _ in active)
-    await message.answer("🎁 <b>Get Access</b>\n\nYou are linked to multiple communities:\n\n" + names + "\n\nOpen the community's verification link to continue.")
+    await message.answer(
+        "🎁 <b>Referral</b>\n\nYou are linked to multiple communities:\n\n" + names +
+        "\n\nOpen the community's verification link to continue.",
+        reply_markup=user_main_reply_keyboard(),
+    )
+
 
 @router.message(Command("help"))
 async def on_help_command(message: Message) -> None:
     await message.answer(
         "❓ <b>Help</b>\n\n"
-        "Use <b>🎁 Get Access</b> to generate your personal referral link.\n"
+        "Use <b>🎁 Referral</b> to generate your personal referral link.\n"
         "When your invited friends join the verification group, you will receive a personalized notification.\n"
-        "Reach the community's referral target to unlock Premium access."
+        "Reach the community's referral target to unlock Premium access.",
+        reply_markup=user_main_reply_keyboard(),
     )
+
+
+@router.message(F.text == "🎁 Referral")
+async def on_reply_referral(message: Message, session: AsyncSession) -> None:
+    await on_get_access(message, session)
+
+
+@router.message(F.text == "❓ Help")
+async def on_reply_help(message: Message) -> None:
+    await on_help_command(message)

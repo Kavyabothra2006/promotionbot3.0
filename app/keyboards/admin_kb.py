@@ -15,7 +15,7 @@ def admin_root_keyboard() -> InlineKeyboardMarkup:
     b.button(text="👤 Users", callback_data=AdminCB(action="users"))
     b.button(text="📢 Broadcast", callback_data=AdminCB(action="broadcast"))
     b.button(text="💳 Payments", callback_data=AdminCB(action="payments"))
-    b.button(text="📈 Analytics", callback_data=AdminCB(action="analytics_root"))
+    b.button(text="📈 Analytics", callback_data=AdminCB(action="analytics"))
     b.button(text="👮 Admin Management", callback_data=AdminCB(action="admins"))
     b.button(text="💾 Backup & Export", callback_data=AdminCB(action="backup"))
     b.button(text="⚙️ Global Settings", callback_data=AdminCB(action="global_settings"))

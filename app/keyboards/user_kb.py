@@ -99,3 +99,19 @@ def join_premium_keyboard(invite_link: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="🔓 Join Premium", url=invite_link))
     return builder.as_markup()
+
+
+
+def dashboard_keyboard(community_id: int) -> InlineKeyboardMarkup:
+    """Minimal dashboard navigation using callbacks already handled by verification."""
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="🎁 Get Access",
+        callback_data=MenuCB(action="choose_referral", community_id=community_id),
+    )
+    builder.button(
+        text="⬅ Back",
+        callback_data=MenuCB(action="back_main", community_id=community_id),
+    )
+    builder.adjust(1)
+    return builder.as_markup()

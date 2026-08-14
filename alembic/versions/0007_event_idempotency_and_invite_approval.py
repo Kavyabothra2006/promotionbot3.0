@@ -1,4 +1,4 @@
-﻿"""add Telegram update idempotency and Premium invite approval timestamp
+"""add Telegram update idempotency and Premium invite approval timestamp
 
 Revision ID: 0007_event_idempotency_invite
 Revises: 0006_referral_invite_integrity

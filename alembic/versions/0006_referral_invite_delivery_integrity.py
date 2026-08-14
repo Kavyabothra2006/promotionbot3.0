@@ -1,4 +1,4 @@
-﻿"""fix referral history, premium invite uniqueness, and durable broadcast recipients
+"""fix referral history, premium invite uniqueness, and durable broadcast recipients
 
 Revision ID: 0006_referral_invite_integrity
 Revises: 0005_production_constraints

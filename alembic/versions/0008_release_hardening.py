@@ -1,4 +1,4 @@
-﻿"""release hardening: processed-update retention index and broadcast worker token
+"""release hardening: processed-update retention index and broadcast worker token
 
 Revision ID: 0008_release_hardening
 Revises: 0007_event_idempotency_invite

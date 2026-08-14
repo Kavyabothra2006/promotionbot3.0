@@ -11,7 +11,7 @@ from redis.asyncio import Redis
 
 from app.config import settings
 from app.core.logging import setup_logging
-from app.database.base import check_database, dispose_engine, get_session, async_session_factory
+from app.database.base import check_database, dispose_engine, get_session
 from app.handlers.admin import backup as backup_handlers
 from app.handlers.admin import admins as admins_handlers
 from app.handlers.admin import broadcast as broadcast_handlers
@@ -33,7 +33,6 @@ from app.database.models import ProcessedUpdate
 from sqlalchemy import delete
 from datetime import datetime, timedelta, timezone
 from app.services.membership_reconcile import membership_reconcile_loop
-from app.services.cleanup_service import cleanup_scheduler_loop
 from app.core.error_handler import on_error
 from app.core.command_menu import configure_command_menus
 
@@ -116,14 +115,14 @@ async def main() -> None:
 
     storage = RedisStorage(redis=redis)
     bot = Bot(token=settings.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    async with get_session() as session:
+        await configure_command_menus(bot, session)
     dp = Dispatcher(storage=storage)
     dp.update.outer_middleware(DbSessionMiddleware())
     dp.update.outer_middleware(UpdateIdempotencyMiddleware(redis=redis, lock_timeout=settings.IDEMPOTENCY_LOCK_SECONDS))
     dp.update.middleware(ThrottlingMiddleware(redis=redis))
     dp.errors.register(on_error)
     _register_routers(dp)
-    async with get_session() as session:
-        await configure_command_menus(bot, session)
     broadcast_handlers.configure_broadcast_redis(redis)
 
     expiry_task = asyncio.create_task(_invite_expiry_loop(bot), name="invite-expiry")
@@ -135,9 +134,6 @@ async def main() -> None:
     processed_update_cleanup_task = asyncio.create_task(_processed_update_cleanup_loop(), name="processed-update-cleanup")
     membership_reconcile_task = asyncio.create_task(
         membership_reconcile_loop(bot), name="membership-reconcile"
-    )
-    cleanup_task = asyncio.create_task(
-        cleanup_scheduler_loop(bot, async_session_factory), name="cleanup-scheduler"
     )
 
     try:
@@ -154,7 +150,6 @@ async def main() -> None:
         broadcast_recovery_task.cancel()
         processed_update_cleanup_task.cancel()
         membership_reconcile_task.cancel()
-        cleanup_task.cancel()
         try:
             await expiry_task
         except asyncio.CancelledError:
@@ -173,10 +168,6 @@ async def main() -> None:
             pass
         try:
             await membership_reconcile_task
-        except asyncio.CancelledError:
-            pass
-        try:
-            await cleanup_task
         except asyncio.CancelledError:
             pass
         await broadcast_handlers.shutdown_broadcast_tasks()

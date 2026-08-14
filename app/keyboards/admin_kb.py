@@ -23,14 +23,29 @@ def admin_root_keyboard() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def community_picker_keyboard(communities: list[Community], page: int = 0) -> InlineKeyboardMarkup:
+def community_picker_keyboard(communities: list[Community], page: int = 0, *, can_add: bool = False, section: str = "") -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     total_pages = max(1, (len(communities) + PAGE_SIZE - 1) // PAGE_SIZE)
     page = max(0, min(page, total_pages - 1))
     chunk = communities[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
     for c in chunk:
-        b.button(text=f"📋 {c.name[:58]}", callback_data=AdminCB(action="community", community_id=c.id, page=page))
-    b.button(text="➕ Add Community", callback_data=AdminCB(action="add_community"))
+        if section:
+            b.button(
+                text=f"📋 {c.name[:58]}",
+                callback_data=AdminCB(
+                    action="section_community",
+                    community_id=c.id,
+                    page=page,
+                    value=section,
+                ),
+            )
+        else:
+            b.button(
+                text=f"📋 {c.name[:58]}",
+                callback_data=AdminCB(action="community", community_id=c.id, page=page),
+            )
+    if can_add:
+        b.button(text="➕ Add Community", callback_data=AdminCB(action="add_community"))
     if page > 0:
         b.button(text="◀ Previous", callback_data=AdminCB(action="communities", page=page - 1))
     if page + 1 < total_pages:
@@ -108,4 +123,51 @@ def purchase_request_keyboard(community_id: int, request_id: int) -> InlineKeybo
     b.button(text="✅ Approve", callback_data=f"pur:approve:{community_id}:{request_id}")
     b.button(text="❌ Reject", callback_data=f"pur:reject:{community_id}:{request_id}")
     b.adjust(2)
+    return b.as_markup()
+
+
+def admin_users_keyboard(community_id: int) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="🚫 Ban User", callback_data=AdminCB(action="user_action", community_id=community_id, value="ban"))
+    b.button(text="✅ Unban User", callback_data=AdminCB(action="user_action", community_id=community_id, value="unban"))
+    b.button(text="🔎 Search User", callback_data=AdminCB(action="user_action", community_id=community_id, value="search"))
+    b.button(text="⬅️ Admin Panel", callback_data=AdminCB(action="root"))
+    b.adjust(1)
+    return b.as_markup()
+
+
+def admin_broadcast_scope_keyboard(community_id: int) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="📣 All Members", callback_data=AdminCB(action="broadcast_scope", community_id=community_id, value="all"))
+    b.button(text="💎 Premium Members", callback_data=AdminCB(action="broadcast_scope", community_id=community_id, value="premium"))
+    b.button(text="⬅️ Admin Panel", callback_data=AdminCB(action="root"))
+    b.adjust(1)
+    return b.as_markup()
+
+
+def admin_payment_keyboard(community_id: int) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="🔄 Refresh Pending Requests", callback_data=AdminCB(action="payments", community_id=community_id))
+    b.button(text="⬅️ Admin Panel", callback_data=AdminCB(action="root"))
+    b.adjust(1)
+    return b.as_markup()
+
+
+def admin_admin_management_keyboard(community_id: int) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="➕ Add Admin", callback_data=AdminCB(action="admin_action", community_id=community_id, value="add"))
+    b.button(text="➖ Remove Admin", callback_data=AdminCB(action="admin_action", community_id=community_id, value="remove"))
+    b.button(text="📋 List Admins", callback_data=AdminCB(action="admin_action", community_id=community_id, value="list"))
+    b.button(text="⬅️ Admin Panel", callback_data=AdminCB(action="root"))
+    b.adjust(1)
+    return b.as_markup()
+
+
+def admin_backup_keyboard(community_id: int) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="💾 Backup", callback_data=AdminCB(action="backup_action", community_id=community_id, value="backup"))
+    b.button(text="📤 Export Users", callback_data=AdminCB(action="backup_action", community_id=community_id, value="export_users"))
+    b.button(text="♻️ Restore", callback_data=AdminCB(action="backup_action", community_id=community_id, value="restore"))
+    b.button(text="⬅️ Admin Panel", callback_data=AdminCB(action="root"))
+    b.adjust(1)
     return b.as_markup()

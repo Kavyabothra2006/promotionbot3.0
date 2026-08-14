@@ -34,6 +34,7 @@ from sqlalchemy import delete
 from datetime import datetime, timedelta, timezone
 from app.services.membership_reconcile import membership_reconcile_loop
 from app.core.error_handler import on_error
+from app.core.command_menu import configure_command_menus
 
 logger = logging.getLogger(__name__)
 INVITE_EXPIRY_CHECK_INTERVAL_SECONDS = 900
@@ -119,6 +120,9 @@ async def main() -> None:
     dp.update.outer_middleware(UpdateIdempotencyMiddleware(redis=redis, lock_timeout=settings.IDEMPOTENCY_LOCK_SECONDS))
     dp.update.middleware(ThrottlingMiddleware(redis=redis))
     dp.errors.register(on_error)
+    async with get_session() as command_session:
+        await configure_command_menus(bot, command_session)
+        await command_session.commit()
     _register_routers(dp)
     broadcast_handlers.configure_broadcast_redis(redis)
 

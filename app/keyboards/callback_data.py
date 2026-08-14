@@ -21,8 +21,9 @@ class PurchaseCB(CallbackData, prefix="pur"):
 
 class AdminCB(CallbackData, prefix="adm"):
     action: str
-    community_id: int
+    community_id: int = 0
     page: int = 0
+    value: str = ""
 
 
 class ConfirmCB(CallbackData, prefix="cfm"):

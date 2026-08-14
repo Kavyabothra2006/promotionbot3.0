@@ -377,24 +377,30 @@ async def retry_pending_referral_unlocks(bot: Bot) -> int:
             select(Community).where(Community.is_active.is_(True), Community.premium_chat_id.is_not(None))
         )).scalars().all()
         for community in communities:
-            users = (await session.execute(
-                select(User).where(
-                    User.community_id == community.id,
-                    User.is_premium.is_(False),
-                    User.is_banned.is_(False),
-                    User.has_joined_verification_group.is_(True),
-                    User.premium_unlock_method.in_([UnlockMethod.NONE, UnlockMethod.REFERRAL]),
-                ).order_by(User.id.asc()).limit(100)
-            )).scalars().all()
-            for user in users:
-                completed = await referral_service.get_referral_progress(session, user.id)
-                if completed < community.referral_target:
-                    continue
-                active_invite = await get_active_invite_for_user(session, community.id, user.id)
-                if active_invite is not None:
-                    continue
-                invite = await unlock_premium(bot, session, community, user, UnlockMethod.REFERRAL)
-                if invite is not None:
-                    unlocked += 1
+            last_id = 0
+            while True:
+                users = (await session.execute(
+                    select(User).where(
+                        User.community_id == community.id,
+                        User.is_premium.is_(False),
+                        User.is_banned.is_(False),
+                        User.has_joined_verification_group.is_(True),
+                        User.premium_unlock_method.in_([UnlockMethod.NONE, UnlockMethod.REFERRAL]),
+                        User.id > last_id,
+                    ).order_by(User.id.asc()).limit(100)
+                )).scalars().all()
+                if not users:
+                    break
+                for user in users:
+                    last_id = user.id
+                    completed = await referral_service.get_referral_progress(session, user.id)
+                    if completed < community.referral_target:
+                        continue
+                    active_invite = await get_active_invite_for_user(session, community.id, user.id)
+                    if active_invite is not None:
+                        continue
+                    invite = await unlock_premium(bot, session, community, user, UnlockMethod.REFERRAL)
+                    if invite is not None:
+                        unlocked += 1
         await session.commit()
     return unlocked

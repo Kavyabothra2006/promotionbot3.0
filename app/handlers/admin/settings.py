@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from aiogram import Router
-from aiogram.filters import Command, CommandObject
+from aiogram.filters import Command, CommandObject, StateFilter
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -159,3 +159,123 @@ async def toggle_remove_on_leave(message: Message, command: CommandObject, sessi
     community.remove_on_premium_leave = not community.remove_on_premium_leave
     await session.flush()
     await message.answer(f"✅ Remove-on-premium-leave: {'ON' if community.remove_on_premium_leave else 'OFF'}")
+
+# ---------------------------------------------------------------------------
+# Inline community-settings UX
+# ---------------------------------------------------------------------------
+from aiogram import F
+from aiogram.fsm.context import FSMContext
+from app.keyboards.admin_kb import community_settings_keyboard, referral_settings_keyboard
+from app.keyboards.callback_data import AdminCB
+from app.database.models import Community
+from app.filters.admin_filter import is_admin_of_community
+
+
+@router.callback_query(AdminCB.filter(F.action == "welcome_text"))
+async def ui_welcome_text(call, callback_data: AdminCB, session: AsyncSession, state: FSMContext) -> None:
+    if not await is_owner_of_community(call.from_user.id, callback_data.community_id, session):
+        await call.answer("Owner access required.", show_alert=True); return
+    await state.set_state("community_welcome_text")
+    await state.update_data(community_id=callback_data.community_id)
+    await call.message.answer(
+        "👋 <b>Welcome Message</b>\n\nSend the new welcome message.\n\nSupported variables: <code>{name}</code> <code>{username}</code> <code>{group}</code> <code>{member_count}</code>"
+    )
+    await call.answer()
+
+
+@router.message(StateFilter("community_welcome_text"))
+async def ui_welcome_text_value(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    data = await state.get_data(); community_id = data.get("community_id")
+    if not community_id or not await is_owner_of_community(message.from_user.id, community_id, session):
+        await state.clear(); return
+    text = (message.text or "").strip()
+    if not text:
+        await message.answer("Please send text only."); return
+    community = await community_service.get_by_id(session, community_id)
+    if community is None:
+        await state.clear(); await message.answer("Community not found."); return
+    community.welcome_text = text
+    await session.flush(); await state.clear()
+    await message.answer("✅ Welcome message updated.", reply_markup=community_settings_keyboard(community_id))
+
+
+@router.callback_query(AdminCB.filter(F.action == "welcome_button"))
+async def ui_welcome_button(call, callback_data: AdminCB, session: AsyncSession, state: FSMContext) -> None:
+    if not await is_owner_of_community(call.from_user.id, callback_data.community_id, session):
+        await call.answer("Owner access required.", show_alert=True); return
+    await state.set_state("community_welcome_button")
+    await state.update_data(community_id=callback_data.community_id)
+    await call.message.answer("🔘 Send the new welcome-button text (max 64 characters).")
+    await call.answer()
+
+
+@router.message(StateFilter("community_welcome_button"))
+async def ui_welcome_button_value(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    data = await state.get_data(); community_id = data.get("community_id")
+    if not community_id or not await is_owner_of_community(message.from_user.id, community_id, session):
+        await state.clear(); return
+    text = (message.text or "").strip()[:64]
+    if not text:
+        await message.answer("Please send button text."); return
+    community = await community_service.get_by_id(session, community_id)
+    if community is None:
+        await state.clear(); await message.answer("Community not found."); return
+    community.welcome_button_text = text
+    await session.flush(); await state.clear()
+    await message.answer("✅ Welcome button updated.", reply_markup=community_settings_keyboard(community_id))
+
+
+@router.callback_query(AdminCB.filter(F.action == "welcome_media"))
+async def ui_welcome_media(call, callback_data: AdminCB, session: AsyncSession, state: FSMContext) -> None:
+    if not await is_owner_of_community(call.from_user.id, callback_data.community_id, session):
+        await call.answer("Owner access required.", show_alert=True); return
+    await state.set_state("community_welcome_media")
+    await state.update_data(community_id=callback_data.community_id)
+    await call.message.answer("🖼 Send the new welcome photo, video, GIF, or sticker.\nSend /skip to remove the current media.")
+    await call.answer()
+
+
+@router.message(StateFilter("community_welcome_media"))
+async def ui_welcome_media_value(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    data = await state.get_data(); community_id = data.get("community_id")
+    if not community_id or not await is_owner_of_community(message.from_user.id, community_id, session):
+        await state.clear(); return
+    community = await community_service.get_by_id(session, community_id)
+    if community is None:
+        await state.clear(); await message.answer("Community not found."); return
+    if (message.text or "").strip().lower() == "/skip":
+        from app.database.models import MediaType
+        community.welcome_media_type = MediaType.NONE
+        community.welcome_media_file_id = None
+    elif message.photo:
+        from app.database.models import MediaType
+        community.welcome_media_type = MediaType.PHOTO; community.welcome_media_file_id = message.photo[-1].file_id
+    elif message.video:
+        from app.database.models import MediaType
+        community.welcome_media_type = MediaType.VIDEO; community.welcome_media_file_id = message.video.file_id
+    elif message.animation:
+        from app.database.models import MediaType
+        community.welcome_media_type = MediaType.ANIMATION; community.welcome_media_file_id = message.animation.file_id
+    elif message.sticker:
+        from app.database.models import MediaType
+        community.welcome_media_type = MediaType.STICKER; community.welcome_media_file_id = message.sticker.file_id
+    else:
+        await message.answer("Send a supported media item or /skip."); return
+    await session.flush(); await state.clear()
+    await message.answer("✅ Welcome media updated.", reply_markup=community_settings_keyboard(community_id))
+
+
+@router.message(StateFilter("admin_referral_target"))
+async def ui_referral_target_value(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    data = await state.get_data(); community_id = data.get("admin_community_id")
+    if not community_id or not await is_owner_of_community(message.from_user.id, community_id, session):
+        await state.clear(); return
+    text = (message.text or "").strip()
+    if not text.isdigit() or not 1 <= int(text) <= 10:
+        await message.answer("Send a number from 1 to 10."); return
+    community = await community_service.get_by_id(session, community_id)
+    if community is None:
+        await state.clear(); await message.answer("Community not found."); return
+    community.referral_target = int(text)
+    await session.flush(); await state.clear()
+    await message.answer(f"✅ Access requirement set to <b>{text}</b> successful referrals.", reply_markup=referral_settings_keyboard(community_id))

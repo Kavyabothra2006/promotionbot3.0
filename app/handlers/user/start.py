@@ -4,7 +4,7 @@ import logging
 from html import escape
 
 from aiogram import Bot, Router
-from aiogram.filters import CommandObject, CommandStart
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -122,3 +122,30 @@ async def on_start_plain(message: Message, session: AsyncSession) -> None:
 
     community, user_row = active_non_banned[0]
     await show_verification_menu(message, session, community, user_row)
+
+
+@router.message(Command("getaccess"))
+async def on_get_access(message: Message, session: AsyncSession) -> None:
+    communities = await community_service.find_user_communities(session, message.from_user.id)
+    active = []
+    for community in communities:
+        user_row = await referral_service.get_or_create_user(session, community.id, message.from_user.id, message.from_user.username, message.from_user.first_name)
+        if not user_row.is_banned:
+            active.append((community, user_row))
+    if not active:
+        await message.answer("Join the verification community first, then use 🎁 Get Access again.")
+        return
+    if len(active) == 1:
+        await show_verification_menu(message, session, active[0][0], active[0][1])
+        return
+    names = "\n".join(f"• {c.name}" for c, _ in active)
+    await message.answer("🎁 <b>Get Access</b>\n\nYou are linked to multiple communities:\n\n" + names + "\n\nOpen the community's verification link to continue.")
+
+@router.message(Command("help"))
+async def on_help_command(message: Message) -> None:
+    await message.answer(
+        "❓ <b>Help</b>\n\n"
+        "Use <b>🎁 Get Access</b> to generate your personal referral link.\n"
+        "When your invited friends join the verification group, you will receive a personalized notification.\n"
+        "Reach the community's referral target to unlock Premium access."
+    )

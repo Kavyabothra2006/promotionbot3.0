@@ -33,6 +33,8 @@ from app.database.models import ProcessedUpdate
 from sqlalchemy import delete
 from datetime import datetime, timedelta, timezone
 from app.services.membership_reconcile import membership_reconcile_loop
+from app.services.cleanup_service import cleanup_scheduler_loop
+from app.database.base import async_session_factory
 from app.core.error_handler import on_error
 from app.core.command_menu import configure_command_menus
 
@@ -136,6 +138,9 @@ async def main() -> None:
     membership_reconcile_task = asyncio.create_task(
         membership_reconcile_loop(bot), name="membership-reconcile"
     )
+    cleanup_task = asyncio.create_task(
+        cleanup_scheduler_loop(bot, async_session_factory), name="cleanup-scheduler"
+    )
 
     try:
         # Preserve pending Telegram updates across restarts. Missing chat_member/join-request
@@ -151,6 +156,7 @@ async def main() -> None:
         broadcast_recovery_task.cancel()
         processed_update_cleanup_task.cancel()
         membership_reconcile_task.cancel()
+        cleanup_task.cancel()
         try:
             await expiry_task
         except asyncio.CancelledError:
@@ -169,6 +175,10 @@ async def main() -> None:
             pass
         try:
             await membership_reconcile_task
+        except asyncio.CancelledError:
+            pass
+        try:
+            await cleanup_task
         except asyncio.CancelledError:
             pass
         await broadcast_handlers.shutdown_broadcast_tasks()

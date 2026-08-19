@@ -158,4 +158,4 @@ async def set_referral_target(message: Message, state: FSMContext, session: Asyn
         f"You're now its owner admin. Use /admin to manage it.",
         reply_markup=admin_main_reply_keyboard(),
     )
-    await configure_admin_commands_for_user(message.bot, message.from_user.id)
+    await configure_admin_commands_for_user(message.bot, message.from_user.id, session)

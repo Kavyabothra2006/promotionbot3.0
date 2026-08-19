@@ -46,7 +46,7 @@ async def community_stats(session: AsyncSession, community_id: int) -> dict:
 
     conversion_rate = round((premium_users / total_users) * 100, 1) if total_users else 0.0
     referral_success_rate = round((referrals_completed / referrals_started) * 100, 1) if referrals_started else 0.0
-    unlock_rate = round((premium_users / total_users) * 100, 1) if total_users else 0.0
+    unlock_rate = round((unlocks_today / joins_today) * 100, 1) if joins_today else 0.0
 
     top_result = await session.execute(
         select(User.first_name, User.username, User.telegram_id, func.count(PendingReferral.id).label("completed"))

@@ -37,7 +37,12 @@ def _dt(value: datetime | None) -> str | None:
 
 
 def _parse_dt(value: str | None) -> datetime | None:
-    return datetime.fromisoformat(value) if value else None
+    if not value:
+        return None
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
 async def export_backup(session: AsyncSession, community_id: int) -> dict[str, Any]:
@@ -172,6 +177,9 @@ async def export_backup(session: AsyncSession, community_id: int) -> dict[str, A
 async def import_backup(session: AsyncSession, data: dict[str, Any]) -> Community:
     if not isinstance(data, dict) or data.get("version") not in (2, 3):
         raise ValueError("Unsupported backup version; expected 2 or 3")
+    for key in ("admins", "users", "pending_referrals", "premium_invites", "purchase_requests", "unlock_feed_messages", "broadcasts", "broadcast_deliveries"):
+        if key in data and not isinstance(data[key], list):
+            raise ValueError(f"Backup field '{key}' must be a list")
     c = data.get("community")
     if not isinstance(c, dict):
         raise ValueError("Missing community object")
@@ -189,6 +197,13 @@ async def import_backup(session: AsyncSession, data: dict[str, Any]) -> Communit
 
     result = await session.execute(select(Community).where(Community.verification_chat_id == c["verification_chat_id"]))
     community = result.scalar_one_or_none()
+    premium_owner = None
+    if c.get("premium_chat_id") is not None:
+        premium_owner = (await session.execute(
+            select(Community).where(Community.premium_chat_id == c["premium_chat_id"])
+        )).scalar_one_or_none()
+        if premium_owner is not None and (community is None or premium_owner.id != community.id):
+            raise ValueError("Premium chat ID is already assigned to another community")
     if community is None:
         community = Community(verification_chat_id=c["verification_chat_id"], name=c["name"])
         session.add(community)
@@ -295,6 +310,15 @@ async def import_backup(session: AsyncSession, data: dict[str, Any]) -> Communit
         if not new_user:
             continue
         created_at = _parse_dt(r.get("created_at")) or datetime.now(timezone.utc)
+        status = PurchaseRequestStatus(r.get("status", PurchaseRequestStatus.PENDING.value))
+        if status == PurchaseRequestStatus.PENDING:
+            pending_existing = (await session.execute(select(PurchaseRequest).where(
+                PurchaseRequest.community_id == community.id,
+                PurchaseRequest.user_id == new_user,
+                PurchaseRequest.status == PurchaseRequestStatus.PENDING,
+            ))).scalar_one_or_none()
+            if pending_existing is not None:
+                continue
         existing = (await session.execute(select(PurchaseRequest).where(
             PurchaseRequest.community_id == community.id,
             PurchaseRequest.user_id == new_user,
@@ -304,7 +328,7 @@ async def import_backup(session: AsyncSession, data: dict[str, Any]) -> Communit
             session.add(PurchaseRequest(
                 community_id=community.id,
                 user_id=new_user,
-                status=PurchaseRequestStatus(r.get("status", PurchaseRequestStatus.PENDING.value)),
+                status=status,
                 created_at=_parse_dt(r.get("created_at")) or datetime.now(timezone.utc),
                 updated_at=_parse_dt(r.get("updated_at")) or datetime.now(timezone.utc),
             ))

@@ -66,7 +66,7 @@ async def cmd_restore(message: Message, session: AsyncSession, bot: Bot) -> None
 
     try:
         community = await backup_service.import_backup(session, data)
-    except (KeyError, ValueError) as e:
+    except (KeyError, ValueError, TypeError, AttributeError) as e:
         await message.answer(f"Restore failed: backup file is malformed ({e}).")
         return
 

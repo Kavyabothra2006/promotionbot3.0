@@ -130,24 +130,30 @@ async def _run_broadcast(bot: Bot, job_id: int) -> None:
             job.worker_token = worker_token
             job.started_at = datetime.now(timezone.utc)
             await session.commit()
-
-        heartbeat_task = asyncio.create_task(_renew_broadcast_lease(lock, job_id, worker_token), name=f"broadcast-heartbeat-{job_id}")
-
-        async with async_session_factory() as session:
-            job = await session.get(BroadcastLog, job_id)
-            if job is None or job.status == BroadcastStatus.COMPLETED:
-                return
-            reply_markup = None
-            clean_text = job.content_text
-            if clean_text:
-                clean_text, reply_markup = _extract_button(clean_text)
-
+            content_type = job.content_type
+            content_file_id = job.content_file_id
+            content_text = job.content_text
             sent = job.sent_count or 0
             failed = job.failed_count or 0
-            while True:
-                if heartbeat_task.done():
-                    heartbeat_task.result()
-                owner = await session.execute(select(BroadcastLog.worker_token, BroadcastLog.status).where(BroadcastLog.id == job_id))
+
+        clean_text = content_text
+        reply_markup = None
+        if clean_text:
+            clean_text, reply_markup = _extract_button(clean_text)
+
+        heartbeat_task = asyncio.create_task(
+            _renew_broadcast_lease(lock, job_id, worker_token),
+            name=f"broadcast-heartbeat-{job_id}",
+        )
+
+        while True:
+            if heartbeat_task.done():
+                heartbeat_task.result()
+
+            async with async_session_factory() as session:
+                owner = await session.execute(
+                    select(BroadcastLog.worker_token, BroadcastLog.status).where(BroadcastLog.id == job_id)
+                )
                 owner_row = owner.first()
                 if owner_row is None or owner_row[0] != worker_token or owner_row[1] != BroadcastStatus.RUNNING:
                     logger.warning("Broadcast worker ownership lost; stopping job=%s", job_id)
@@ -166,28 +172,58 @@ async def _run_broadcast(bot: Bot, job_id: int) -> None:
                     )
                 ).scalar_one_or_none()
                 if delivery is None:
-                    break
+                    job = await session.get(BroadcastLog, job_id)
+                    if job is not None and job.worker_token == worker_token and job.status == BroadcastStatus.RUNNING:
+                        job.status = BroadcastStatus.COMPLETED
+                        job.worker_token = None
+                        job.finished_at = datetime.now(timezone.utc)
+                        await session.commit()
+                    return
 
+                telegram_id = delivery.telegram_id
                 delivery.attempts += 1
                 await session.commit()
-                delivered = False
-                last_error = None
-                for _attempt in range(3):
-                    try:
-                        await _send_one(bot, delivery.telegram_id, job.content_type, job.content_file_id, clean_text, reply_markup)
-                        delivered = True
-                        break
-                    except TelegramRetryAfter as exc:
-                        last_error = str(exc)
-                        remaining = float(exc.retry_after)
-                        while remaining > 0:
-                            await asyncio.sleep(min(30.0, remaining))
-                            remaining -= 30.0
-                            if heartbeat_task.done():
-                                heartbeat_task.result()
-                    except TelegramAPIError as exc:
-                        last_error = str(exc)
-                        break
+
+            delivered = False
+            last_error = None
+            for _attempt in range(3):
+                try:
+                    await _send_one(
+                        bot,
+                        telegram_id,
+                        content_type,
+                        content_file_id,
+                        clean_text,
+                        reply_markup,
+                    )
+                    delivered = True
+                    break
+                except TelegramRetryAfter as exc:
+                    last_error = str(exc)
+                    remaining = float(exc.retry_after)
+                    while remaining > 0:
+                        await asyncio.sleep(min(30.0, remaining))
+                        remaining -= 30.0
+                        if heartbeat_task.done():
+                            heartbeat_task.result()
+                except TelegramAPIError as exc:
+                    last_error = str(exc)
+                    break
+
+            async with async_session_factory() as session:
+                job = await session.get(BroadcastLog, job_id)
+                if job is None or job.worker_token != worker_token or job.status != BroadcastStatus.RUNNING:
+                    logger.warning("Broadcast worker ownership lost before delivery update; stopping job=%s", job_id)
+                    return
+                delivery = (await session.execute(
+                    select(BroadcastDelivery).where(
+                        BroadcastDelivery.broadcast_id == job_id,
+                        BroadcastDelivery.telegram_id == telegram_id,
+                        BroadcastDelivery.status == BroadcastDeliveryStatus.PENDING,
+                    ).with_for_update()
+                )).scalar_one_or_none()
+                if delivery is None:
+                    continue
 
                 if delivered:
                     delivery.status = BroadcastDeliveryStatus.SENT
@@ -199,19 +235,10 @@ async def _run_broadcast(bot: Bot, job_id: int) -> None:
                     failed += 1
                 job.sent_count = sent
                 job.failed_count = failed
-                job.last_processed_telegram_id = delivery.telegram_id
+                job.last_processed_telegram_id = telegram_id
                 job.started_at = datetime.now(timezone.utc)
                 await session.commit()
-                await asyncio.sleep(0.05)
-
-            owner = await session.execute(select(BroadcastLog.worker_token, BroadcastLog.status).where(BroadcastLog.id == job_id))
-            owner_row = owner.first()
-            if owner_row is None or owner_row[0] != worker_token or owner_row[1] != BroadcastStatus.RUNNING:
-                return
-            job.status = BroadcastStatus.COMPLETED
-            job.worker_token = None
-            job.finished_at = datetime.now(timezone.utc)
-            await session.commit()
+            await asyncio.sleep(0.05)
     except asyncio.CancelledError:
         raise
     except Exception:

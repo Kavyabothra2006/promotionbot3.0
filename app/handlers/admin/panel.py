@@ -225,12 +225,16 @@ async def on_payments(call: CallbackQuery, callback_data: AdminCB, session: Asyn
 async def on_user_action(
     call: CallbackQuery, callback_data: AdminCB, session: AsyncSession, state: FSMContext
 ) -> None:
-    if not await is_admin_of_community(call.from_user.id, callback_data.community_id, session):
-        await call.answer("Not authorized.", show_alert=True)
-        return
     action = callback_data.value
     if action not in {"ban", "unban", "search"}:
         await call.answer("Unknown action.", show_alert=True)
+        return
+    if action in {"ban", "unban"}:
+        authorized = await is_owner_of_community(call.from_user.id, callback_data.community_id, session)
+    else:
+        authorized = await is_admin_of_community(call.from_user.id, callback_data.community_id, session)
+    if not authorized:
+        await call.answer("Owner access required." if action in {"ban", "unban"} else "Not authorized.", show_alert=True)
         return
     await state.set_state(f"admin_user_{action}")
     await state.update_data(ui_community_id=callback_data.community_id, ui_action=action)
@@ -252,9 +256,17 @@ async def on_user_action_value(
     data = await state.get_data()
     community_id = data.get("ui_community_id")
     action = data.get("ui_action")
-    if not community_id or not action or not await is_admin_of_community(message.from_user.id, community_id, session):
+    if not community_id or not action:
         await state.clear()
         await message.answer("Not authorized.")
+        return
+    if action in {"ban", "unban"}:
+        authorized = await is_owner_of_community(message.from_user.id, community_id, session)
+    else:
+        authorized = await is_admin_of_community(message.from_user.id, community_id, session)
+    if not authorized:
+        await state.clear()
+        await message.answer("Owner access required." if action in {"ban", "unban"} else "Not authorized.")
         return
 
     value = (message.text or "").strip().lstrip("@")
@@ -676,8 +688,8 @@ async def cmd_ban(message: Message, session: AsyncSession, bot: Bot) -> None:
         await message.answer("Usage: /ban <community_id> <telegram_id>")
         return
     community_id, telegram_id = int(parts[1]), int(parts[2])
-    if not await is_admin_of_community(message.from_user.id, community_id, session):
-        await message.answer("Not authorized for this community.")
+    if not await is_owner_of_community(message.from_user.id, community_id, session):
+        await message.answer("Owner access required for ban/unban.")
         return
     result = await session.execute(
         select(User).where(User.community_id == community_id, User.telegram_id == telegram_id)
@@ -710,8 +722,8 @@ async def cmd_unban(message: Message, session: AsyncSession) -> None:
         await message.answer("Usage: /unban <community_id> <telegram_id>")
         return
     community_id, telegram_id = int(parts[1]), int(parts[2])
-    if not await is_admin_of_community(message.from_user.id, community_id, session):
-        await message.answer("Not authorized for this community.")
+    if not await is_owner_of_community(message.from_user.id, community_id, session):
+        await message.answer("Owner access required for ban/unban.")
         return
     result = await session.execute(
         select(User).where(User.community_id == community_id, User.telegram_id == telegram_id)
@@ -884,7 +896,7 @@ async def on_admin_restore_document(message: Message, state: FSMContext, session
     try:
         data = json.loads(buffer.read())
         community = await backup_service.import_backup(session, data)
-    except (json.JSONDecodeError, UnicodeDecodeError, KeyError, ValueError) as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError, KeyError, ValueError, TypeError, AttributeError) as exc:
         await state.clear()
         await message.answer(f"Restore failed: malformed backup ({exc}).")
         return

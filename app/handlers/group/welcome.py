@@ -44,12 +44,24 @@ async def _send_group_welcome(bot: Bot, community: Community, user: User) -> Non
     file_id = community.welcome_media_file_id
 
     try:
-        if media_type == MediaType.PHOTO and file_id:
-            await bot.send_photo(chat_id, file_id, caption=caption, reply_markup=kb)
-        elif media_type == MediaType.VIDEO and file_id:
-            await bot.send_video(chat_id, file_id, caption=caption, reply_markup=kb)
-        elif media_type == MediaType.ANIMATION and file_id:
-            await bot.send_animation(chat_id, file_id, caption=caption, reply_markup=kb)
+        if media_type in {MediaType.PHOTO, MediaType.VIDEO, MediaType.ANIMATION} and file_id:
+            if len(caption) <= 1024:
+                if media_type == MediaType.PHOTO:
+                    await bot.send_photo(chat_id, file_id, caption=caption, reply_markup=kb)
+                elif media_type == MediaType.VIDEO:
+                    await bot.send_video(chat_id, file_id, caption=caption, reply_markup=kb)
+                else:
+                    await bot.send_animation(chat_id, file_id, caption=caption, reply_markup=kb)
+            else:
+                # Telegram limits media captions to 1024 characters. Preserve the
+                # configured welcome text instead of losing the whole welcome on an API error.
+                if media_type == MediaType.PHOTO:
+                    await bot.send_photo(chat_id, file_id)
+                elif media_type == MediaType.VIDEO:
+                    await bot.send_video(chat_id, file_id)
+                else:
+                    await bot.send_animation(chat_id, file_id)
+                await bot.send_message(chat_id, caption, reply_markup=kb)
         elif media_type == MediaType.STICKER and file_id:
             await bot.send_sticker(chat_id, file_id)
             await bot.send_message(chat_id, caption, reply_markup=kb)

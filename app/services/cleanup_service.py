@@ -37,9 +37,17 @@ async def cleanup_community_messages(bot: Bot, session: AsyncSession, community:
         try:
             await bot.delete_message(row.chat_id, row.message_id)
             deleted += 1
+            await session.delete(row)
         except TelegramAPIError:
-            pass
-        await session.delete(row)
+            # Keep a still-eligible message tracked so transient Telegram/API
+            # failures can be retried on the next scheduled cleanup. Once a
+            # message is outside Telegram's deletion window, the row is removed
+            # above because it can no longer be made deletable.
+            logger.warning(
+                "Could not delete cleanup message chat=%s message=%s; keeping it for retry",
+                row.chat_id,
+                row.message_id,
+            )
     await session.flush()
     return deleted
 

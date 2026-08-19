@@ -48,7 +48,12 @@ class UpdateIdempotencyMiddleware(BaseMiddleware):
             logger.debug("Skipping already-completed Telegram update_id=%s", update_id)
             return None
 
-        lock = self.redis.lock(f"telegram:update:{update_id}", timeout=self.lock_timeout, blocking=False)
+        lock = self.redis.lock(
+            f"telegram:update:{update_id}",
+            timeout=self.lock_timeout,
+            blocking=True,
+            blocking_timeout=self.lock_timeout,
+        )
         acquired = await lock.acquire()
         if not acquired:
             logger.warning("Skipping concurrently processing Telegram update_id=%s", update_id)

@@ -36,6 +36,10 @@ def verification_menu_keyboard(
         callback_data=MenuCB(action="choose_referral", community_id=community_id),
     )
     builder.button(
+        text="⚡ Buy Instantly",
+        callback_data=MenuCB(action="choose_instant", community_id=community_id),
+    )
+    builder.button(
         text="❓ Help",
         callback_data=MenuCB(action="help", community_id=community_id),
     )

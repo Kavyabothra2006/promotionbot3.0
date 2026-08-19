@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 async def on_error(event: ErrorEvent, bot: Bot) -> bool:
     exc = event.exception
     logger.exception("Unhandled Telegram update error", exc_info=(type(exc), exc, exc.__traceback__))
-    text = f"🚨 Bot error\n\n{type(exc).__name__}: {str(exc)[:1200]}"
+    text = f"🚨 Bot error\n\nUnhandled {type(exc).__name__}. See application logs for details."
     for admin_id in settings.SUPER_ADMIN_IDS:
         try:
             await bot.send_message(admin_id, text)

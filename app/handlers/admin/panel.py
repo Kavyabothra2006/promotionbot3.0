@@ -403,7 +403,7 @@ async def on_admin_manage_value(message: Message, state: FSMContext, session: As
             session.add(CommunityAdmin(community_id=community_id, telegram_id=telegram_id, role=role))
         await session.commit()
         from app.core.command_menu import configure_admin_commands_for_user
-        await configure_admin_commands_for_user(bot, telegram_id)
+        await configure_admin_commands_for_user(bot, telegram_id, session)
         await message.answer("✅ Admin updated.", reply_markup=admin_main_reply_keyboard())
     else:
         existing = (
@@ -432,7 +432,7 @@ async def on_admin_manage_value(message: Message, state: FSMContext, session: As
         await session.delete(existing)
         await session.commit()
         from app.core.command_menu import configure_user_commands_for_user
-        await configure_user_commands_for_user(bot, telegram_id)
+        await configure_user_commands_for_user(bot, telegram_id, session)
         await message.answer("✅ Admin removed.", reply_markup=admin_main_reply_keyboard())
     await state.clear()
 

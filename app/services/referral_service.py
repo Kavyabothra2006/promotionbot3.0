@@ -194,6 +194,9 @@ async def confirm_referral_on_join(
     pending.status = ReferralStatus.COUNTED
     pending.resolved_at = now
     referred_user.referred_by_user_id = referrer.id
+    # Sessions use autoflush=False. Flush the state change before counting so the
+    # progress query sees this referral as COUNTED instead of the old PENDING row.
+    await session.flush()
     completed = await get_referral_progress(session, referrer.id)
     return referrer, completed
 

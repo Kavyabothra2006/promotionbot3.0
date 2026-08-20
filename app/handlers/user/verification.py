@@ -81,9 +81,7 @@ async def on_back_main(call: CallbackQuery, callback_data: MenuCB, session: Asyn
     community, user_row = resolved
     completed = await referral_service.get_referral_progress(session, user_row.id)
     text = await _verification_text(user_row, completed, community.referral_target)
-    await call.message.edit_text(
-        text, reply_markup=verification_menu_keyboard(completed, community.referral_target, community.id)
-    )
+    await call.message.edit_text(text, reply_markup=None)
     await call.answer()
 
 

@@ -5,7 +5,7 @@ Production-oriented Python Telegram bot for managing multiple independent verifi
 ## Stack
 
 - Python 3.10+
-- aiogram 3.15
+- aiogram 3.16.0
 - PostgreSQL + SQLAlchemy async + Alembic
 - Redis for FSM state and distributed throttling
 - Telegram `file_id` storage for welcome/broadcast media

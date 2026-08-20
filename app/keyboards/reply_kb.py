@@ -9,7 +9,6 @@ def user_main_reply_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="🎁 Referral"), KeyboardButton(text="❓ Help")],
         ],
         resize_keyboard=True,
-        is_persistent=True,
         input_field_placeholder="Choose an option",
     )
 
@@ -23,6 +22,5 @@ def admin_main_reply_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text="💾 Backup & Export"), KeyboardButton(text="⚙️ Global Settings")],
         ],
         resize_keyboard=True,
-        is_persistent=True,
         input_field_placeholder="Admin panel",
     )

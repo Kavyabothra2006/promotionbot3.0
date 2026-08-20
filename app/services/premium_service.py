@@ -184,7 +184,12 @@ async def handle_premium_join_request(bot: Bot, session: AsyncSession, event) ->
     from app.services.community_service import get_by_premium_chat
 
     community = await get_by_premium_chat(session, event.chat.id)
-    if community is None or community.premium_chat_id is None:
+    if community is None or community.premium_chat_id is None or not community.is_active:
+        if event.invite_link is not None and community is not None:
+            try:
+                await bot.decline_chat_join_request(event.chat.id, user.id)
+            except TelegramAPIError:
+                logger.exception("Could not decline Premium join request for inactive community=%s", community.id)
         return
 
     if event.invite_link is None:
@@ -214,18 +219,54 @@ async def handle_premium_join_request(bot: Bot, session: AsyncSession, event) ->
         )
         return
 
-    await bot.approve_chat_join_request(event.chat.id, user.id)
-    # Approval itself is the durable Premium entitlement. The later chat_member event
-    # only confirms physical membership and marks the invite used.
     now = datetime.now(timezone.utc)
     invited_user = (await session.execute(select(User).where(User.id == row.user_id).with_for_update())).scalar_one()
-    if not invited_user.is_premium:
-        invited_user.is_premium = True
-        invited_user.premium_unlocked_at = invited_user.premium_unlocked_at or now
-        if invited_user.premium_unlock_method == UnlockMethod.NONE:
-            invited_user.premium_unlock_method = UnlockMethod.REFERRAL
+    if invited_user.is_banned:
+        row.status = PremiumInviteStatus.REVOKED
+        row.revoked_at = now
+        await session.commit()
+        try:
+            await bot.decline_chat_join_request(event.chat.id, user.id)
+        except TelegramAPIError:
+            logger.exception("Could not decline Premium join request from banned user=%s", user.id)
+        await admin_service.notify_admins(
+            bot, session, community.id,
+            f"🚫 Banned Premium join request from <code>{user.id}</code> was declined.",
+        )
+        return
+
+    invite_id = row.id
+    invited_user_id = row.user_id
+    await bot.approve_chat_join_request(event.chat.id, user.id)
+    invited_user.is_premium = True
+    invited_user.premium_unlocked_at = invited_user.premium_unlocked_at or now
+    if invited_user.premium_unlock_method == UnlockMethod.NONE:
+        invited_user.premium_unlock_method = UnlockMethod.REFERRAL
     row.approved_at = now
-    await session.commit()
+    try:
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        try:
+            await bot.ban_chat_member(event.chat.id, user.id)
+            await bot.unban_chat_member(event.chat.id, user.id)
+        except TelegramAPIError:
+            logger.exception("Could not compensate Telegram Premium approval for user=%s", user.id)
+        try:
+            current_invite = await session.get(PremiumInvite, invite_id, with_for_update=True)
+            current_user = await session.get(User, invited_user_id, with_for_update=True)
+            if current_invite is not None:
+                current_invite.status = PremiumInviteStatus.REVOKED
+                current_invite.revoked_at = datetime.now(timezone.utc)
+            if current_user is not None:
+                current_user.is_premium = False
+                current_user.joined_premium_at = None
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            logger.exception("Could not restore Premium DB state after approval failure for user=%s", user.id)
+        logger.exception("Premium join approval DB update failed for user=%s", user.id)
+        return
 
 
 async def get_active_invite_for_user(session: AsyncSession, community_id: int, user_id: int) -> PremiumInvite | None:

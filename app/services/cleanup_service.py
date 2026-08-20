@@ -65,9 +65,26 @@ async def cleanup_scheduler_loop(bot: Bot, session_factory) -> None:
                     if delta is None:
                         continue
                     last = community.cleanup_last_run_at
-                    if last is None or now - last >= delta:
+                    scheduled_run_due = last is None or now - last >= delta
+                    # Telegram's deletion window is shorter than the optional 3-day
+                    # and weekly schedules. Sweep messages approaching expiry so they
+                    # are deleted before they become permanently undeletable.
+                    expiry_cutoff = now - timedelta(hours=44)
+                    expiring = (
+                        await session.execute(
+                            select(CleanupMessage.id)
+                            .where(
+                                CleanupMessage.community_id == community.id,
+                                CleanupMessage.created_at <= expiry_cutoff,
+                                CleanupMessage.created_at > now - timedelta(hours=47),
+                            )
+                            .limit(1)
+                        )
+                    ).scalar_one_or_none() is not None
+                    if scheduled_run_due or expiring:
                         await cleanup_community_messages(bot, session, community)
-                        community.cleanup_last_run_at = now
+                        if scheduled_run_due:
+                            community.cleanup_last_run_at = now
                 await session.commit()
         except Exception:
             logger.exception("Cleanup scheduler failed")

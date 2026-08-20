@@ -39,6 +39,9 @@ async def set_welcome_text(message: Message, command: CommandObject, session: As
     if community is None:
         await message.answer("Community not found.")
         return
+    if len(text) > 4096:
+        await message.answer("Welcome text is too long. Maximum length is 4096 characters.")
+        return
     community.welcome_text = text
     await session.flush()
     await message.answer("✅ Welcome text updated.")

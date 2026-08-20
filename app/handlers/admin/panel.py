@@ -10,7 +10,7 @@ from html import escape
 from app.config import settings
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database.models import User
+from app.database.models import Community, User
 from app.filters.admin_filter import IsAdminFilter, is_admin_of_community, is_owner_of_community
 from app.keyboards.admin_kb import (
     admin_panel_keyboard, admin_root_keyboard, community_picker_keyboard, community_menu_keyboard,
@@ -382,6 +382,15 @@ async def on_admin_manage_value(message: Message, state: FSMContext, session: As
                 await message.answer("Role must be moderator or owner.")
                 return
             role = AdminRole(parts[1].lower())
+
+        community = (
+            await session.execute(
+                select(Community).where(Community.id == community_id).with_for_update()
+            )
+        ).scalar_one_or_none()
+        if community is None:
+            await message.answer("Community not found.")
+            return
 
         existing = (
             await session.execute(
@@ -897,8 +906,14 @@ async def on_admin_restore_document(message: Message, state: FSMContext, session
         data = json.loads(buffer.read())
         community = await backup_service.import_backup(session, data)
     except (json.JSONDecodeError, UnicodeDecodeError, KeyError, ValueError, TypeError, AttributeError) as exc:
+        await session.rollback()
         await state.clear()
         await message.answer(f"Restore failed: malformed backup ({exc}).")
+        return
+    except Exception:
+        await session.rollback()
+        await state.clear()
+        await message.answer("Restore failed: the backup could not be applied.")
         return
     await state.clear()
     await message.answer(

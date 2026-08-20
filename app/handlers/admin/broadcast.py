@@ -287,6 +287,14 @@ async def receive_broadcast_content(message: Message, state: FSMContext, session
         await message.answer("Unsupported content. Send text, photo, video, animation, or sticker.")
         return
 
+    if content_text:
+        clean_text, _ = _extract_button(content_text)
+        limit = 4096 if content_type == BroadcastContentType.TEXT else 1024
+        if len(clean_text) > limit:
+            kind = "message" if content_type == BroadcastContentType.TEXT else "caption"
+            await message.answer(f"Broadcast {kind} is too long. Maximum length is {limit} characters.")
+            return
+
     filters = [User.community_id == community_id, User.is_banned.is_(False)]
     if scope == "premium":
         filters.append(User.is_premium.is_(True))

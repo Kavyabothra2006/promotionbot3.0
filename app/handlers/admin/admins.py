@@ -6,7 +6,7 @@ from aiogram.types import Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database.models import AdminRole, CommunityAdmin
+from app.database.models import AdminRole, Community, CommunityAdmin
 from app.filters.admin_filter import IsAdminFilter, is_owner_of_community
 from app.services import community_service
 from app.core.command_menu import configure_admin_commands_for_user, configure_user_commands_for_user
@@ -40,7 +40,12 @@ async def add_admin(message: Message, command: CommandObject, session: AsyncSess
     if not await is_owner_of_community(message.from_user.id, community_id, session):
         await message.answer("Only the community owner can manage admins.")
         return
-    if await community_service.get_by_id(session, community_id) is None:
+    community = (
+        await session.execute(
+            select(Community).where(Community.id == community_id).with_for_update()
+        )
+    ).scalar_one_or_none()
+    if community is None:
         await message.answer("Community not found.")
         return
     if role == AdminRole.OWNER:

@@ -41,5 +41,7 @@ def downgrade() -> None:
         op.drop_index("ix_cleanup_messages_community_id", table_name="cleanup_messages")
         op.drop_table("cleanup_messages")
     cols = {c["name"] for c in inspector.get_columns("communities")}
+    if "cleanup_last_run_at" in cols:
+        op.drop_column("communities", "cleanup_last_run_at")
     if "cleanup_frequency" in cols:
         op.drop_column("communities", "cleanup_frequency")

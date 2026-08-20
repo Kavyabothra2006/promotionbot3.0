@@ -79,6 +79,17 @@ def downgrade() -> None:
     op.drop_index("uq_active_premium_invite_per_user", table_name="premium_invites")
     op.drop_index("ix_pending_referral_history", table_name="pending_referrals")
     op.drop_index("uq_pending_referral_per_person", table_name="pending_referrals")
+    # The pre-0006 schema allowed only one referral row per person. Preserve the
+    # newest referral record for each community/person pair before restoring that
+    # invariant so the downgrade remains executable on databases containing history.
+    op.execute(sa.text("""
+        DELETE FROM pending_referrals p
+        USING pending_referrals newer
+        WHERE p.community_id = newer.community_id
+          AND p.referred_telegram_id = newer.referred_telegram_id
+          AND (p.created_at < newer.created_at
+               OR (p.created_at = newer.created_at AND p.id < newer.id))
+    """))
     op.create_unique_constraint(
         "uq_one_referral_record_per_person",
         "pending_referrals",

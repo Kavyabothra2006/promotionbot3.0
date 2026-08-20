@@ -68,8 +68,9 @@ class UpdateIdempotencyMiddleware(BaseMiddleware):
                 return None
 
             result = await handler(event, data)
-            session.add(ProcessedUpdate(update_id=update_id))
-            await session.flush()
+            if not data.get("update_throttled"):
+                session.add(ProcessedUpdate(update_id=update_id))
+                await session.flush()
             return result
         finally:
             heartbeat.cancel()

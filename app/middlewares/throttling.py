@@ -65,5 +65,6 @@ class ThrottlingMiddleware(BaseMiddleware):
         )
         if not acquired:
             logger.debug("Throttled user=%s event=%s", user.id, event_kind)
+            data["update_throttled"] = True
             return None
         return await handler(event, data)

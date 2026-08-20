@@ -45,8 +45,15 @@ class ThrottlingMiddleware(BaseMiddleware):
     ) -> Any:
         user, event_kind = self._user_and_kind(event)
 
-        # Membership transitions are authoritative business events. Never discard them.
-        if user is None or event_kind in {"chat_member", "chat_join_request", "my_chat_member"}:
+        # Membership transitions and callback queries are authoritative interaction events.
+        # Callback buttons are already protected by their handlers/authorization checks;
+        # throttling them can silently discard legitimate menu navigation.
+        if user is None or event_kind in {
+            "chat_member",
+            "chat_join_request",
+            "my_chat_member",
+            "callback_query",
+        }:
             return await handler(event, data)
 
         chat_id = None

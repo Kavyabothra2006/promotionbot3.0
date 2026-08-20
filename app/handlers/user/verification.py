@@ -137,6 +137,11 @@ async def on_choose_instant(call: CallbackQuery, callback_data: MenuCB, session:
     if resolved is None:
         return
     community, user = resolved
+    user = (
+        await session.execute(
+            select(User).where(User.id == user.id).with_for_update()
+        )
+    ).scalar_one()
 
     if user.is_premium:
         await call.answer("You already have Premium.", show_alert=True)
